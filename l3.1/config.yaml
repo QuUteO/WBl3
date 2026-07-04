@@ -1,0 +1,12 @@
+HTTP:
+  ADDRESS: "localhost:8080"
+
+POSTGRES:
+  POSTGRES_USER: user
+  POSTGRES_PASSWORD: user
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: mydb
+  SSL_MODE: disable
+  MAX_CONNS: 10
+  MIN_CONNS: 5
