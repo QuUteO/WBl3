@@ -20,9 +20,9 @@ require (
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
+	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect

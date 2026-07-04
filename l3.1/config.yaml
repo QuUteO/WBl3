@@ -7,6 +7,6 @@ POSTGRES:
   POSTGRES_HOST: localhost
   POSTGRES_PORT: 5432
   POSTGRES_DB: mydb
-  SSL_MODE: disable
   MAX_CONNS: 10
   MIN_CONNS: 5
+  POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier,

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"time"
-
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -12,21 +10,18 @@ type Config struct {
 }
 
 type Postgres struct {
-	Host     string `yaml:"POSTGRES_HOST" default:"localhost"`
-	Port     uint16 `yaml:"POSTGRES_PORT" default:"5432"`
-	User     string `yaml:"POSTGRES_USER" default:"postgres"`
-	Password string `yaml:"POSTGRES_PASSWORD" default:"postgres"`
-	Database string `yaml:"POSTGRES_DB" default:"postgres"`
-	SSLMode  string `yaml:"SSL_MODE" default:"disable"`
-	MaxConns int32  `yaml:"MAX_CONNS" default:"10"`
-	MinConns int32  `yaml:"MIN_CONNS" default:"5"`
+	Host        string `yaml:"POSTGRES_HOST" default:"localhost"`
+	Port        uint16 `yaml:"POSTGRES_PORT" default:"5432"`
+	User        string `yaml:"POSTGRES_USER" default:"postgres"`
+	Password    string `yaml:"POSTGRES_PASSWORD" default:"postgres"`
+	Database    string `yaml:"POSTGRES_DB" default:"postgres"`
+	MaxConns    int32  `yaml:"MAX_CONNS" default:"10"`
+	MinConns    int32  `yaml:"MIN_CONNS" default:"5"`
+	PostgresDSN string `yaml:"POSTGRES_DSN"`
 }
 
 type HTTPServer struct {
-	Address      string        `yaml:"ADDRESS" default:"localhost:8080"`
-	ReadTimeout  time.Duration `yaml:"READ_TIMEOUT" default:"10s"`
-	WriteTimeout time.Duration `yaml:"WRITE_TIMEOUT" default:"10s"`
-	IdleTimeout  time.Duration `yaml:"IDLE_TIMEOUT" default:"120s"`
+	Address string `yaml:"ADDRESS" default:"localhost:8080"`
 }
 
 func LoadConfig(path string) (*Config, error) {
