@@ -1,2 +1,6 @@
 {"level":"info","ts":"2026-07-04T12:40:46.395+0300","caller":"logger/adapter_zap.go:86","msg":"База данных запустилась","service":"","env":"local"}
 {"level":"info","ts":"2026-07-04T12:45:06.819+0300","caller":"logger/adapter_zap.go:86","msg":"База данных запустилась","service":"","env":"local"}
+{"level":"info","ts":"2026-07-05T13:17:17.150+0300","caller":"logger/adapter_zap.go:86","msg":"База данных запустилась","service":"","env":"local"}
+{"level":"info","ts":"2026-07-05T13:17:17.151+0300","caller":"logger/adapter_zap.go:86","msg":"HTTP-сервер запускается на localhost:8080","service":"","env":"local"}
+{"level":"info","ts":"2026-07-05T13:17:35.290+0300","caller":"logger/adapter_zap.go:86","msg":"База данных запустилась","service":"","env":"local"}
+{"level":"info","ts":"2026-07-05T13:17:35.290+0300","caller":"logger/adapter_zap.go:86","msg":"HTTP-сервер запускается на localhost:8080","service":"","env":"local"}

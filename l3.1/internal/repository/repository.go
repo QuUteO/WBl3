@@ -3,7 +3,6 @@ package repository
 import (
 	model "DelayedNotifier/internal"
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	pgxdriver "github.com/wb-go/wbf/dbpg/pgx-driver"
@@ -13,26 +12,13 @@ type Repository struct {
 	conn *pgxdriver.Postgres
 }
 
-func NewRepository(conn *pgxdriver.Postgres) *Repository {
+func New(conn *pgxdriver.Postgres) *Repository {
 	return &Repository{
 		conn: conn,
 	}
 }
 
 func (r *Repository) CreateNotification(ctx context.Context, notification *model.Notification) error {
-	notification := &model.Notification{
-		ID:          uuid.New(),
-		Recipient:   req.Recipient,
-		Channel:     req.Channel,
-		Message:     req.Message,
-		ScheduledAt: req.ScheduledAt,
-		Status:      "scheduled",
-		MaxRetries:  5,
-		RetryCount:  0,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-
 	_, err := r.conn.Exec(ctx, "INSERT INTO notifications (id, recipient, channel, message, scheduled_at, status, retry_count, max_retries, sent_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
 		notification.ID,
 		notification.Recipient,

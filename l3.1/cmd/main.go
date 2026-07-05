@@ -2,6 +2,9 @@ package main
 
 import (
 	"DelayedNotifier/internal/config"
+	"DelayedNotifier/internal/handler"
+	"DelayedNotifier/internal/repository"
+	"DelayedNotifier/internal/service"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,7 +20,6 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(cfg.Postgres.PostgresDSN)
 
 	log, err := logger.InitLogger(
 		logger.ZapEngine,
@@ -31,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = pgxdriver.New(
+	pgx, err := pgxdriver.New(
 		cfg.Postgres.PostgresDSN,
 		log,
 		pgxdriver.MaxPoolSize(50),
@@ -42,12 +44,21 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Ошибка подключения к базе данных: %v\n ", err)
 		os.Exit(1)
 	}
-
 	log.Info("База данных запустилась")
+
+	rep := repository.New(pgx)
+	srv := service.New(rep)
+	handler := handler.New(srv)
 
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("POST /notify", handler.CreateNotification)
+	mux.HandleFunc("GET /notify/{id}", handler.GetNotification)
+	mux.HandleFunc("DELETE /notify/{id}", handler.DeleteNotification)
+
+	// Запуск HTTP-сервера
+	log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
 	if err := http.ListenAndServe(cfg.HTTP.Address, mux); err != nil {
-		fmt.Println(err)
+		log.Error("Ошибка запуска сервера: " + err.Error())
 	}
 }
