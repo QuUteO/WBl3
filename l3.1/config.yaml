@@ -6,7 +6,7 @@ POSTGRES:
   POSTGRES_PASSWORD: user
   POSTGRES_HOST: localhost
   POSTGRES_PORT: 5432
-  POSTGRES_DB: mydb
+  POSTGRES_DB: DelayedNotifier
   MAX_CONNS: 10
   MIN_CONNS: 5
   POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier

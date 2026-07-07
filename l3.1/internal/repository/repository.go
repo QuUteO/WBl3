@@ -39,17 +39,29 @@ func (r *Repository) CreateNotification(ctx context.Context, notification *model
 	return nil
 }
 
-func (r *Repository) GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.CreateNotification, error) {
-	var notification model.CreateNotification
+func (r *Repository) GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.Notification, error) {
+	var n model.Notification
 
-	row := r.conn.QueryRow(ctx, "SELECT recipient, channel, message, scheduled_at FROM notifications WHERE id = $1", notificationID)
+	row := r.conn.QueryRow(ctx, "SELECT id, recipient, channel, message, scheduled_at, status, retry_count, max_retries, sent_at, created_at, updated_at FROM notifications WHERE id = $1", notificationID)
 
-	err := row.Scan(&notification.Recipient, &notification.Channel, &notification.Message, &notification.ScheduledAt)
+	err := row.Scan(
+		&n.ID,
+		&n.Recipient,
+		&n.Channel,
+		&n.Message,
+		&n.ScheduledAt,
+		&n.Status,
+		&n.RetryCount,
+		&n.MaxRetries,
+		&n.SentAt,
+		&n.CreatedAt,
+		&n.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &notification, nil
+	return &n, nil
 }
 
 func (r *Repository) DeleteNotification(ctx context.Context, notificationID uuid.UUID) error {

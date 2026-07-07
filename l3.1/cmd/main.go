@@ -4,7 +4,7 @@ import (
 	model "DelayedNotifier/internal"
 	"DelayedNotifier/internal/config"
 	"DelayedNotifier/internal/handler"
-	"DelayedNotifier/internal/rabbitmq"
+	pub "DelayedNotifier/internal/rabbitmq" // Назначили алиас для твоего адаптера
 	"DelayedNotifier/internal/repository"
 	"DelayedNotifier/internal/service"
 	"context"
@@ -80,10 +80,10 @@ func main() {
 
 	wbfPublisher := rabbitmq.NewPublisher(client, cfg.RabbitMQ.ExchangeName, "application/json")
 
-	pub := rabbit.New(wbfPublisher)
+	pubAdapter := pub.New(wbfPublisher) // Используем исправленный алиас pub
 
 	rep := repository.New(pgx)
-	srv := service.New(rep, pub)
+	srv := service.New(rep, pubAdapter)
 	h := handler.New(srv)
 
 	handler := func(ctx context.Context, d amqp091.Delivery) error {
@@ -134,7 +134,7 @@ func main() {
 	go func() {
 		log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
 		if err := router.Run(cfg.HTTP.Address); err != nil {
-			log.Error("Ошибка запуска сервера: " + err.Error())
+			log.Error("Ошибка запуска сервера: %v", err)
 		}
 	}()
 

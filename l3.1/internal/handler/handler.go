@@ -5,15 +5,13 @@ import (
 	"context"
 	"net/http"
 
-	// Подставь сюда правильный путь к твоему пакету ginext в проекте
-
 	"github.com/google/uuid"
 	"github.com/wb-go/wbf/ginext"
 )
 
 type NotificationService interface {
 	CreateNotification(ctx context.Context, req *model.CreateNotification) (*model.Notification, error)
-	GetNotification(ctx context.Context, id uuid.UUID) (*model.CreateNotification, error)
+	GetNotification(ctx context.Context, id uuid.UUID) (*model.Notification, error)
 	DeleteNotification(ctx context.Context, id uuid.UUID) error
 }
 
@@ -27,7 +25,6 @@ func New(service NotificationService) *Handler {
 	}
 }
 
-// CreateNotification POST /notify
 func (h *Handler) CreateNotification(c *ginext.Context) {
 	var req model.CreateNotification
 
@@ -42,11 +39,9 @@ func (h *Handler) CreateNotification(c *ginext.Context) {
 		return
 	}
 
-	// Быстрая отправка JSON с правильным статус-кодом
 	c.JSON(http.StatusCreated, notification)
 }
 
-// GetNotification GET /notify/:id
 func (h *Handler) GetNotification(c *ginext.Context) {
 	id := c.Param("id")
 
@@ -65,7 +60,6 @@ func (h *Handler) GetNotification(c *ginext.Context) {
 	c.JSON(http.StatusOK, notification)
 }
 
-// DeleteNotification DELETE /notify/:id
 func (h *Handler) DeleteNotification(c *ginext.Context) {
 	id := c.Param("id")
 

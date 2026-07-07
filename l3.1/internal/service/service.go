@@ -25,7 +25,7 @@ const (
 
 type NotificationRepository interface {
 	CreateNotification(ctx context.Context, notification *model.Notification) error
-	GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.CreateNotification, error)
+	GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.Notification, error) // Тип изменен на полный
 	DeleteNotification(ctx context.Context, notificationID uuid.UUID) error
 }
 
@@ -101,7 +101,7 @@ func (s *Service) CreateNotification(ctx context.Context, req *model.CreateNotif
 	return &notification, nil
 }
 
-func (s *Service) GetNotification(ctx context.Context, id uuid.UUID) (*model.CreateNotification, error) {
+func (s *Service) GetNotification(ctx context.Context, id uuid.UUID) (*model.Notification, error) {
 	notification, err := s.repository.GetNotification(ctx, id)
 	if err != nil {
 		return nil, err
@@ -116,4 +116,10 @@ func (s *Service) GetNotification(ctx context.Context, id uuid.UUID) (*model.Cre
 
 func (s *Service) DeleteNotification(ctx context.Context, id uuid.UUID) error {
 	return s.repository.DeleteNotification(ctx, id)
+}
+
+func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification) error {
+	// Сюда переедет логика ретраев и отправки во внешнее API (Telegram/Email),
+	// о которой ты размышлял. Пока оставляем пустую заглушку для компиляции.
+	return nil
 }
