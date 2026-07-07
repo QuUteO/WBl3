@@ -7,6 +7,7 @@ import (
 type Config struct {
 	Postgres Postgres   `yaml:"POSTGRES"`
 	HTTP     HTTPServer `yaml:"HTTP"`
+	RabbitMQ RabbitMQ   `yaml:"RABBITMQ"`
 }
 
 type Postgres struct {
@@ -22,6 +23,12 @@ type Postgres struct {
 
 type HTTPServer struct {
 	Address string `yaml:"ADDRESS" default:"localhost:8080"`
+}
+
+type RabbitMQ struct {
+	URL            string `yaml:"URL" default:"amqp://guest:guest@localhost:5672/"`
+	ConnectionName string `yaml:"CONNECTION_NAME" default:"DelayedNotifier"`
+	ExchangeName   string `yaml:"EXCHANGE" default:"DelayedNotifier"`
 }
 
 func LoadConfig(path string) (*Config, error) {

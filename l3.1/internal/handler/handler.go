@@ -3,15 +3,17 @@ package handler
 import (
 	model "DelayedNotifier/internal"
 	"context"
-	"encoding/json"
 	"net/http"
 
+	// Подставь сюда правильный путь к твоему пакету ginext в проекте
+
 	"github.com/google/uuid"
+	"github.com/wb-go/wbf/ginext"
 )
 
 type NotificationService interface {
 	CreateNotification(ctx context.Context, req *model.CreateNotification) (*model.Notification, error)
-	GetNotification(ctx context.Context, id uuid.UUID) (*model.CreateNotification, error) // Исправлено на *model.Notification
+	GetNotification(ctx context.Context, id uuid.UUID) (*model.CreateNotification, error)
 	DeleteNotification(ctx context.Context, id uuid.UUID) error
 }
 
@@ -20,79 +22,64 @@ type Handler struct {
 }
 
 func New(service NotificationService) *Handler {
-	return &Handler{service: service}
+	return &Handler{
+		service: service,
+	}
 }
 
-func (h *Handler) CreateNotification(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
+// CreateNotification POST /notify
+func (h *Handler) CreateNotification(c *ginext.Context) {
 	var req model.CreateNotification
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
-	defer r.Body.Close()
 
-	notification, err := h.service.CreateNotification(r.Context(), &req)
+	notification, err := h.service.CreateNotification(c.Request.Context(), &req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(notification)
+	// Быстрая отправка JSON с правильным статус-кодом
+	c.JSON(http.StatusCreated, notification)
 }
 
-func (h *Handler) GetNotification(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	id := r.PathValue("id")
+// GetNotification GET /notify/:id
+func (h *Handler) GetNotification(c *ginext.Context) {
+	id := c.Param("id")
 
 	ID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
-	notification, err := h.service.GetNotification(r.Context(), ID)
+	notification, err := h.service.GetNotification(c.Request.Context(), ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(notification)
+	c.JSON(http.StatusOK, notification)
 }
 
-func (h *Handler) DeleteNotification(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
-
-	id := r.PathValue("id")
+// DeleteNotification DELETE /notify/:id
+func (h *Handler) DeleteNotification(c *ginext.Context) {
+	id := c.Param("id")
 
 	ID, err := uuid.Parse(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, ginext.H{"error": err.Error()})
 		return
 	}
 
-	err = h.service.DeleteNotification(r.Context(), ID)
+	err = h.service.DeleteNotification(c.Request.Context(), ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	c.JSON(http.StatusOK, ginext.H{"status": "deleted"})
 }

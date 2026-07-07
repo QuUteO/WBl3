@@ -3,16 +3,18 @@ package main
 import (
 	"DelayedNotifier/internal/config"
 	"DelayedNotifier/internal/handler"
+	"DelayedNotifier/internal/rabbitmq"
 	"DelayedNotifier/internal/repository"
 	"DelayedNotifier/internal/service"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
-	_ "github.com/wb-go/wbf/dbpg/pgx-driver"
-	pgxdriver "github.com/wb-go/wbf/dbpg/pgx-driver"
+	"github.com/wb-go/wbf/dbpg/pgx-driver"
+	"github.com/wb-go/wbf/ginext"
 	"github.com/wb-go/wbf/logger"
+	"github.com/wb-go/wbf/rabbitmq"
+	"github.com/wb-go/wbf/retry"
 )
 
 func main() {
@@ -46,19 +48,48 @@ func main() {
 	}
 	log.Info("База данных запустилась")
 
+	strategy := retry.Strategy{
+		Attempts: 5,
+		Delay:    3 * time.Second,
+		Backoff:  2,
+	}
+
+	rabbitCfg := rabbitmq.ClientConfig{
+		URL:            cfg.RabbitMQ.URL,
+		ConnectionName: cfg.RabbitMQ.ConnectionName,
+		ConnectTimeout: 5 * time.Second,
+		Heartbeat:      10 * time.Second,
+		ProducingStrat: strategy,
+		ConsumingStrat: strategy,
+	}
+
+	client, err := rabbitmq.NewClient(rabbitCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка создания клиента %s\n", err)
+		os.Exit(1)
+	}
+
+	wbfPublisher := rabbitmq.NewPublisher(client, cfg.RabbitMQ.ExchangeName, "application/json")
+
+	pub := rabbit.New(wbfPublisher)
+
 	rep := repository.New(pgx)
-	srv := service.New(rep)
-	handler := handler.New(srv)
 
-	mux := http.NewServeMux()
+	srv := service.New(rep, pub)
 
-	mux.HandleFunc("POST /notify", handler.CreateNotification)
-	mux.HandleFunc("GET /notify/{id}", handler.GetNotification)
-	mux.HandleFunc("DELETE /notify/{id}", handler.DeleteNotification)
+	h := handler.New(srv)
 
-	// Запуск HTTP-сервера
+	router := ginext.New("debug")
+
+	router.Use(ginext.Logger(), ginext.Recovery())
+
+	router.POST("/notify", h.CreateNotification)
+	router.GET("/notify/:id", h.GetNotification)
+	router.DELETE("/notify/:id", h.DeleteNotification)
+
 	log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
-	if err := http.ListenAndServe(cfg.HTTP.Address, mux); err != nil {
+
+	if err := router.Run(cfg.HTTP.Address); err != nil {
 		log.Error("Ошибка запуска сервера: " + err.Error())
 	}
 }

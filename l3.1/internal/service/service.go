@@ -29,12 +29,20 @@ type NotificationRepository interface {
 	DeleteNotification(ctx context.Context, notificationID uuid.UUID) error
 }
 
-type Service struct {
-	repository NotificationRepository
+type NotificationPublisher interface {
+	Push(ctx context.Context, data *model.Notification, routingKey string) error
 }
 
-func New(repository NotificationRepository) *Service {
-	return &Service{repository: repository}
+type Service struct {
+	repository NotificationRepository
+	publisher  NotificationPublisher
+}
+
+func New(repository NotificationRepository, publisher NotificationPublisher) *Service {
+	return &Service{
+		repository: repository,
+		publisher:  publisher,
+	}
 }
 
 func (s *Service) CreateNotification(ctx context.Context, req *model.CreateNotification) (*model.Notification, error) {
@@ -71,6 +79,21 @@ func (s *Service) CreateNotification(ctx context.Context, req *model.CreateNotif
 	}
 
 	err := s.repository.CreateNotification(ctx, &notification)
+	if err != nil {
+		return nil, err
+	}
+
+	var routingKey string
+	switch notification.Channel {
+	case channelTelegram:
+		routingKey = "notification.telegram"
+	case channelEmail:
+		routingKey = "notification.email"
+	default:
+		routingKey = "notification"
+	}
+
+	err = s.publisher.Push(ctx, &notification, routingKey)
 	if err != nil {
 		return nil, err
 	}

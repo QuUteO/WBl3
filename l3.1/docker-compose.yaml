@@ -13,5 +13,15 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: delayed-notifier-rabbitmq
+    ports:
+      - "5762:5762"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
 volumes:
   pg_data:

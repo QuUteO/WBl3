@@ -9,4 +9,9 @@ POSTGRES:
   POSTGRES_DB: mydb
   MAX_CONNS: 10
   MIN_CONNS: 5
-  POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier,
+  POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier
+
+RABBITMQ:
+  URL: amqp://guest:guest@localhost:5672/
+  CONNECTION_NAME: DelayedNotifier
+  EXCHANGE: delayed.notifier
