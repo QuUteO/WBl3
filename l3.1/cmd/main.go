@@ -1,15 +1,21 @@
 package main
 
 import (
+	model "DelayedNotifier/internal"
 	"DelayedNotifier/internal/config"
 	"DelayedNotifier/internal/handler"
 	"DelayedNotifier/internal/rabbitmq"
 	"DelayedNotifier/internal/repository"
 	"DelayedNotifier/internal/service"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/rabbitmq/amqp091-go"
 	"github.com/wb-go/wbf/dbpg/pgx-driver"
 	"github.com/wb-go/wbf/ginext"
 	"github.com/wb-go/wbf/logger"
@@ -18,6 +24,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	cfg, err := config.LoadConfig("/Users/mihailignatev/Desktop/WBl3/l3.1/config.yaml")
 	if err != nil {
 		fmt.Println(err)
@@ -74,22 +83,65 @@ func main() {
 	pub := rabbit.New(wbfPublisher)
 
 	rep := repository.New(pgx)
-
 	srv := service.New(rep, pub)
-
 	h := handler.New(srv)
 
-	router := ginext.New("debug")
+	handler := func(ctx context.Context, d amqp091.Delivery) error {
+		log.Info("Сообщение доставлено: ", string(d.Body))
 
+		var notification model.Notification
+		err := json.Unmarshal(d.Body, &notification)
+		if err != nil {
+			log.Error("Ошибка анмаршалинга")
+			return err
+		}
+
+		err = srv.ProcessNotification(ctx, &notification)
+		if err != nil {
+			log.Error("Воркер не смог обработать уведомление %s: %v", notification.ID, err)
+			return err
+		}
+
+		return nil
+	}
+
+	queueArgs := amqp091.Table{
+		"x-dead-letter-exchange":    "dlx",
+		"x-dead-letter-routing-key": "test.queue.dlq",
+	}
+
+	consumerCfg := rabbitmq.ConsumerConfig{
+		Queue: "my-queue",
+		Args:  queueArgs,
+	}
+
+	consumer := rabbitmq.NewConsumer(client, consumerCfg, handler)
+
+	go func() {
+		log.Info("Фоновый воркер (Consumer) успешно запущен и ждет сообщения...")
+		if err := consumer.Start(ctx); err != nil {
+			log.Error("Ошибка при потреблении сообщений: %v", err)
+		}
+	}()
+
+	router := ginext.New("debug")
 	router.Use(ginext.Logger(), ginext.Recovery())
 
 	router.POST("/notify", h.CreateNotification)
 	router.GET("/notify/:id", h.GetNotification)
 	router.DELETE("/notify/:id", h.DeleteNotification)
 
-	log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
+	go func() {
+		log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
+		if err := router.Run(cfg.HTTP.Address); err != nil {
+			log.Error("Ошибка запуска сервера: " + err.Error())
+		}
+	}()
 
-	if err := router.Run(cfg.HTTP.Address); err != nil {
-		log.Error("Ошибка запуска сервера: " + err.Error())
-	}
+	<-ctx.Done()
+
+	log.Info("Получен сигнал завершения. Мягко останавливаем приложение (Graceful Shutdown)...")
+
+	time.Sleep(2 * time.Second)
+	log.Info("Приложение полностью остановлено.")
 }
