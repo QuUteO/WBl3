@@ -3,6 +3,7 @@ package repository
 import (
 	model "DelayedNotifier/internal"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	pgxdriver "github.com/wb-go/wbf/dbpg/pgx-driver"
@@ -66,6 +67,28 @@ func (r *Repository) GetNotification(ctx context.Context, notificationID uuid.UU
 
 func (r *Repository) DeleteNotification(ctx context.Context, notificationID uuid.UUID) error {
 	_, err := r.conn.Exec(ctx, "DELETE FROM notifications WHERE id = $1", notificationID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateStatus(ctx context.Context, id uuid.UUID, status string, at *time.Time, count int) error {
+	sql := "UPDATE notifications SET status = $2, sent_at = $3, updated_at = $4, retry_count = $5 WHERE id = $1"
+
+	_, err := r.conn.Exec(ctx, sql, id, status, at, time.Now(), count)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateRetryInfo(ctx context.Context, id uuid.UUID, status string, count int, at time.Time) error {
+	sql := "UPDATE notifications SET status = $2, retry_count = $3, scheduled_at = $4, updated_at = $5 WHERE id = $1"
+
+	_, err := r.conn.Exec(ctx, sql, id, status, count, at, time.Now())
 	if err != nil {
 		return err
 	}

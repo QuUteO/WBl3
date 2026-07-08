@@ -4,7 +4,7 @@ import (
 	model "DelayedNotifier/internal"
 	"DelayedNotifier/internal/config"
 	"DelayedNotifier/internal/handler"
-	pub "DelayedNotifier/internal/rabbitmq" // Назначили алиас для твоего адаптера
+	pub "DelayedNotifier/internal/rabbitmq"
 	"DelayedNotifier/internal/repository"
 	"DelayedNotifier/internal/service"
 	"context"
@@ -80,13 +80,14 @@ func main() {
 
 	wbfPublisher := rabbitmq.NewPublisher(client, cfg.RabbitMQ.ExchangeName, "application/json")
 
-	pubAdapter := pub.New(wbfPublisher) // Используем исправленный алиас pub
+	pubAdapter := pub.New(wbfPublisher)
 
 	rep := repository.New(pgx)
-	srv := service.New(rep, pubAdapter)
+	srv := service.New(rep, pubAdapter, cfg.Telegram.Token, &cfg.SMTP)
 	h := handler.New(srv)
 
-	handler := func(ctx context.Context, d amqp091.Delivery) error {
+	// Переименовали переменную во избежание затенения пакета handler
+	messageProcessor := func(ctx context.Context, d amqp091.Delivery) error {
 		log.Info("Сообщение доставлено: ", string(d.Body))
 
 		var notification model.Notification
@@ -98,8 +99,10 @@ func main() {
 
 		err = srv.ProcessNotification(ctx, &notification)
 		if err != nil {
-			log.Error("Воркер не смог обработать уведомление %s: %v", notification.ID, err)
-			return err
+			// Возвращаем nil, так как логика повторов (retry) уже отработала на уровне БД.
+			// Если вернуть ошибку наружу, RabbitMQ мгновенно зациклит это сообщение.
+			log.Error("Воркер не смог обработать уведомление %s: %v. Статус обновлен в БД.", notification.ID, err)
+			return nil
 		}
 
 		return nil
@@ -111,11 +114,11 @@ func main() {
 	}
 
 	consumerCfg := rabbitmq.ConsumerConfig{
-		Queue: "my-queue",
+		Queue: "notification-queue",
 		Args:  queueArgs,
 	}
 
-	consumer := rabbitmq.NewConsumer(client, consumerCfg, handler)
+	consumer := rabbitmq.NewConsumer(client, consumerCfg, messageProcessor)
 
 	go func() {
 		log.Info("Фоновый воркер (Consumer) успешно запущен и ждет сообщения...")

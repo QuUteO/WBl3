@@ -8,6 +8,8 @@ type Config struct {
 	Postgres Postgres   `yaml:"POSTGRES"`
 	HTTP     HTTPServer `yaml:"HTTP"`
 	RabbitMQ RabbitMQ   `yaml:"RABBITMQ"`
+	Telegram Telegram   `yaml:"TELEGRAM"`
+	SMTP     SMTP       `yaml:"EMAIL"`
 }
 
 type Postgres struct {
@@ -29,6 +31,17 @@ type RabbitMQ struct {
 	URL            string `yaml:"URL" default:"amqp://guest:guest@localhost:5672/"`
 	ConnectionName string `yaml:"CONNECTION_NAME" default:"DelayedNotifier"`
 	ExchangeName   string `yaml:"EXCHANGE" default:"DelayedNotifier"`
+}
+
+type Telegram struct {
+	Token string `yaml:"BOT_TOKEN"`
+}
+
+type SMTP struct {
+	SMTPHost    string `yaml:"SMTP_HOST"`
+	SMTPPort    string `yaml:"SMTP_PORT"`
+	SenderEmail string `yaml:"SENDER_EMAIL"`
+	Password    string `yaml:"PASSWORD"`
 }
 
 func LoadConfig(path string) (*Config, error) {

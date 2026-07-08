@@ -15,3 +15,12 @@ RABBITMQ:
   URL: amqp://guest:guest@localhost:5672/
   CONNECTION_NAME: DelayedNotifier
   EXCHANGE: delayed.notifier
+
+TELEGRAM:
+  BOT_TOKEN: 8053553966:AAFJlaWEoESKW59vFaJfan45p23SkxBbCt8
+
+EMAIL:
+  SMTP_PORT: 2525
+  SMTP_HOST: smtp.mailtrap.io
+  SENDER_EMAIL: quuteo@yandex.ru
+  PASSWORD: pass
