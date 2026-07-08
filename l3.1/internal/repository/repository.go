@@ -95,3 +95,39 @@ func (r *Repository) UpdateRetryInfo(ctx context.Context, id uuid.UUID, status s
 
 	return nil
 }
+
+// FetchReadyNotifications атомарно выбирает готовые к отправке записи и блокирует их статусом 'processing'
+func (r *Repository) FetchReadyNotifications(ctx context.Context, limit int) ([]*model.Notification, error) {
+	query := `
+		UPDATE notifications 
+		SET status = 'processing', updated_at = $1
+		WHERE id IN (
+			SELECT id FROM notifications 
+			WHERE status IN ('scheduled', 'retry') AND scheduled_at <= $1
+			ORDER BY scheduled_at ASC
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED
+		)
+		RETURNING id, recipient, channel, message, scheduled_at, status, retry_count, max_retries, sent_at, created_at, updated_at`
+
+	rows, err := r.conn.Query(ctx, query, time.Now(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*model.Notification
+	for rows.Next() {
+		var n model.Notification
+		err := rows.Scan(
+			&n.ID, &n.Recipient, &n.Channel, &n.Message, &n.ScheduledAt,
+			&n.Status, &n.RetryCount, &n.MaxRetries, &n.SentAt, &n.CreatedAt, &n.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, &n)
+	}
+
+	return list, nil
+}

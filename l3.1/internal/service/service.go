@@ -22,6 +22,7 @@ var (
 	ErrScheduledInPast    = errors.New("нельзя запланировать отправку в прошлое")
 	ErrScheduledTooFar    = errors.New("нельзя запланировать отправку более чем на 1 год вперед")
 	ErrEmptyNotification  = errors.New("пустая структура уведомлений")
+	ErrTooEarly           = errors.New("время отправки уведомления еще не наступило")
 )
 
 const (
@@ -34,9 +35,9 @@ type NotificationRepository interface {
 	CreateNotification(ctx context.Context, notification *model.Notification) error
 	GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.Notification, error)
 	DeleteNotification(ctx context.Context, notificationID uuid.UUID) error
-
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, at *time.Time, count int) error
 	UpdateRetryInfo(ctx context.Context, id uuid.UUID, status string, count int, at time.Time) error
+	FetchReadyNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
 }
 
 type NotificationPublisher interface {
@@ -97,7 +98,11 @@ func (s *Service) CreateNotification(ctx context.Context, req *model.CreateNotif
 		return nil, err
 	}
 
-	// Возвращаем динамический выбор routingKey в зависимости от канала
+	// Если уведомление отложено на будущее (более 10 сек), не отправляем в RabbitMQ сразу
+	if notification.ScheduledAt.After(now.Add(10 * time.Second)) {
+		return &notification, nil
+	}
+
 	var routingKey string
 	switch notification.Channel {
 	case channelTelegram:
@@ -134,17 +139,23 @@ func (s *Service) DeleteNotification(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification) error {
+	now := time.Now()
+
+	if n.ScheduledAt.After(now.Add(5 * time.Second)) {
+		_ = s.repository.UpdateRetryInfo(ctx, n.ID, "scheduled", n.RetryCount, n.ScheduledAt)
+		return ErrTooEarly
+	}
+
 	err := s.SendToExternalAPI(ctx, n)
 
-	now := time.Now()
 	if err == nil {
 		n.Status = "sent"
 		n.SentAt = &now
 		n.UpdatedAt = now
-
 		return s.repository.UpdateStatus(ctx, n.ID, n.Status, n.SentAt, n.RetryCount)
 	}
 
+	// Если ошибка — увеличиваем счетчик ретраев
 	n.RetryCount++
 	n.UpdatedAt = now
 
@@ -153,7 +164,8 @@ func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification
 		log.Printf("Уведомление %s превысило лимит попыток и помечено как failed", n.ID)
 	} else {
 		n.Status = "retry"
-		n.ScheduledAt = now.Add(5 * time.Minute)
+		backoffMinutes := 1 << uint(n.RetryCount)
+		n.ScheduledAt = now.Add(time.Duration(backoffMinutes) * time.Minute)
 		log.Printf("Ошибка отправки уведомления %s (попытка %d/%d). Переносим на %v", n.ID, n.RetryCount, n.MaxRetries, n.ScheduledAt)
 	}
 
@@ -165,7 +177,35 @@ func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification
 	return err
 }
 
-// Наполняем метод реальной отправкой
+func (s *Service) CheckAndPublishDelayed(ctx context.Context) error {
+	// База данных теперь автоматически ставит статус 'processing' при выборке
+	notifications, err := s.repository.FetchReadyNotifications(ctx, 50)
+	if err != nil {
+		return fmt.Errorf("ошибка выборки отложенных уведомлений: %w", err)
+	}
+
+	for _, n := range notifications {
+		var routingKey string
+		switch n.Channel {
+		case channelTelegram:
+			routingKey = "notification.telegram"
+		case channelEmail:
+			routingKey = "notification.email"
+		default:
+			routingKey = "notification"
+		}
+
+		err = s.publisher.Push(ctx, n, routingKey)
+		if err != nil {
+			log.Printf("Не удалось отправить отложенное уведомление %s в очередь: %v", n.ID, err)
+			// Если пуш в очередь провалился, возвращаем статус назад
+			_ = s.repository.UpdateRetryInfo(ctx, n.ID, "scheduled", n.RetryCount, n.ScheduledAt)
+			continue
+		}
+	}
+	return nil
+}
+
 func (s *Service) SendToExternalAPI(ctx context.Context, n *model.Notification) error {
 	switch n.Channel {
 	case channelTelegram:

@@ -9,6 +9,7 @@ import (
 	"DelayedNotifier/internal/service"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -86,25 +87,25 @@ func main() {
 	srv := service.New(rep, pubAdapter, cfg.Telegram.Token, &cfg.SMTP)
 	h := handler.New(srv)
 
-	// Переименовали переменную во избежание затенения пакета handler
 	messageProcessor := func(ctx context.Context, d amqp091.Delivery) error {
-		log.Info("Сообщение доставлено: ", string(d.Body))
-
 		var notification model.Notification
 		err := json.Unmarshal(d.Body, &notification)
 		if err != nil {
-			log.Error("Ошибка анмаршалинга")
+			log.Error("Ошибка анмаршалинга сообщения")
 			return err
 		}
 
 		err = srv.ProcessNotification(ctx, &notification)
 		if err != nil {
-			// Возвращаем nil, так как логика повторов (retry) уже отработала на уровне БД.
-			// Если вернуть ошибку наружу, RabbitMQ мгновенно зациклит это сообщение.
-			log.Error("Воркер не смог обработать уведомление %s: %v. Статус обновлен в БД.", notification.ID, err)
+			if errors.Is(err, service.ErrTooEarly) {
+				log.Info(fmt.Sprintf("Уведомление %s пришло слишком рано, возвращено в расписание", notification.ID))
+				return nil
+			}
+			log.Error(fmt.Sprintf("Воркер не смог отправить уведомление %s: %v", notification.ID, err))
 			return nil
 		}
 
+		log.Info(fmt.Sprintf("Уведомление %s успешно обработано и отправлено", notification.ID))
 		return nil
 	}
 
@@ -123,7 +124,29 @@ func main() {
 	go func() {
 		log.Info("Фоновый воркер (Consumer) успешно запущен и ждет сообщения...")
 		if err := consumer.Start(ctx); err != nil {
-			log.Error("Ошибка при потреблении сообщений: %v", err)
+			log.Error(fmt.Sprintf("Ошибка при потреблении сообщений: %v", err))
+		}
+	}()
+
+	// Фоновый планировщик отложенных уведомлений (Тикер раз в 10 секунд)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		log.Info("Фоновый планировщик отложенных уведомлений успешно запущен...")
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("Фоновый планировщик останавливается...")
+				return
+			case <-ticker.C:
+				scanCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				if err := srv.CheckAndPublishDelayed(scanCtx); err != nil {
+					log.Error(fmt.Sprintf("Ошибка при сканировании отложенных уведомлений: %v", err))
+				}
+				cancel()
+			}
 		}
 	}()
 
@@ -137,14 +160,13 @@ func main() {
 	go func() {
 		log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)
 		if err := router.Run(cfg.HTTP.Address); err != nil {
-			log.Error("Ошибка запуска сервера: %v", err)
+			log.Error(fmt.Sprintf("Ошибка запуска сервера: %v", err))
 		}
 	}()
 
 	<-ctx.Done()
 
 	log.Info("Получен сигнал завершения. Мягко останавливаем приложение (Graceful Shutdown)...")
-
 	time.Sleep(2 * time.Second)
 	log.Info("Приложение полностью остановлено.")
 }
