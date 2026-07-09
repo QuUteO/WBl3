@@ -11,6 +11,12 @@ POSTGRES:
   MIN_CONNS: 5
   POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier
 
+REDIS:
+  ADDRESS: "localhost:6379"
+  PASSWORD: ""
+  MAX_MEMORY: "256mb"
+  POLICY: "allkeys-lru"
+
 RABBITMQ:
   URL: amqp://guest:guest@localhost:5672/
   CONNECTION_NAME: DelayedNotifier

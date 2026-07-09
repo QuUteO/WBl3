@@ -6,6 +6,7 @@ import (
 
 type Config struct {
 	Postgres Postgres   `yaml:"POSTGRES"`
+	Redis    Redis      `yaml:"REDIS"`
 	HTTP     HTTPServer `yaml:"HTTP"`
 	RabbitMQ RabbitMQ   `yaml:"RABBITMQ"`
 	Telegram Telegram   `yaml:"TELEGRAM"`
@@ -21,6 +22,13 @@ type Postgres struct {
 	MaxConns    int32  `yaml:"MAX_CONNS" default:"10"`
 	MinConns    int32  `yaml:"MIN_CONNS" default:"5"`
 	PostgresDSN string `yaml:"POSTGRES_DSN"`
+}
+
+type Redis struct {
+	Address   string `yaml:"ADDRESS" default:"localhost:6379"`
+	Password  string `yaml:"PASSWORD" default:""`
+	MaxMemory string `yaml:"MAX_MEMORY" default:"256mb"`
+	Policy    string `yaml:"POLICY" default:"allkeys-lru"`
 }
 
 type HTTPServer struct {

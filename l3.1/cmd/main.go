@@ -21,6 +21,7 @@ import (
 	"github.com/wb-go/wbf/ginext"
 	"github.com/wb-go/wbf/logger"
 	"github.com/wb-go/wbf/rabbitmq"
+	"github.com/wb-go/wbf/redis"
 	"github.com/wb-go/wbf/retry"
 )
 
@@ -45,6 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 1. Инициализация Базы Данных (Postgres)
 	pgx, err := pgxdriver.New(
 		cfg.Postgres.PostgresDSN,
 		log,
@@ -58,12 +60,45 @@ func main() {
 	}
 	log.Info("База данных запустилась")
 
+	// 2. Инициализация и подключение к Redis
+	redisOpts := redis.Options{
+		Address:   cfg.Redis.Address,
+		Password:  cfg.Redis.Password,
+		MaxMemory: cfg.Redis.MaxMemory,
+		Policy:    cfg.Redis.Policy,
+	}
+
+	redisClient, err := redis.Connect(redisOpts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка подключения к Redis: %v\n", err)
+		os.Exit(1)
+	}
+	log.Info("Redis успешно подключен и настроен")
+
+	// Закрываем клиент Redis при выходе из приложения
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			log.Error(fmt.Sprintf("Ошибка при закрытии Redis: %v", err))
+		} else {
+			log.Info("Соединение с Redis успешно закрыто.")
+		}
+	}()
+
+	// Стратегия ретраев для RabbitMQ
 	strategy := retry.Strategy{
 		Attempts: 5,
 		Delay:    3 * time.Second,
 		Backoff:  2,
 	}
 
+	// Отдельная быстрая стратегия ретраев для Redis кэша
+	redisStrategy := retry.Strategy{
+		Attempts: 3,
+		Delay:    100 * time.Millisecond,
+		Backoff:  1,
+	}
+
+	// 3. Настройка RabbitMQ
 	rabbitCfg := rabbitmq.ClientConfig{
 		URL:            cfg.RabbitMQ.URL,
 		ConnectionName: cfg.RabbitMQ.ConnectionName,
@@ -80,13 +115,14 @@ func main() {
 	}
 
 	wbfPublisher := rabbitmq.NewPublisher(client, cfg.RabbitMQ.ExchangeName, "application/json")
-
 	pubAdapter := pub.New(wbfPublisher)
 
-	rep := repository.New(pgx)
+	// 4. Сборка слоев (Dependency Injection) с добавлением Redis
+	rep := repository.New(pgx, redisClient, redisStrategy)
 	srv := service.New(rep, pubAdapter, cfg.Telegram.Token, &cfg.SMTP)
 	h := handler.New(srv)
 
+	// 5. Логика обработки сообщений (Воркер)
 	messageProcessor := func(ctx context.Context, d amqp091.Delivery) error {
 		var notification model.Notification
 		err := json.Unmarshal(d.Body, &notification)
@@ -121,6 +157,7 @@ func main() {
 
 	consumer := rabbitmq.NewConsumer(client, consumerCfg, messageProcessor)
 
+	// Запуск потребителя RabbitMQ
 	go func() {
 		log.Info("Фоновый воркер (Consumer) успешно запущен и ждет сообщения...")
 		if err := consumer.Start(ctx); err != nil {
@@ -150,6 +187,7 @@ func main() {
 		}
 	}()
 
+	// 6. Запуск HTTP Сервера
 	router := ginext.New("debug")
 	router.Use(ginext.Logger(), ginext.Recovery())
 
