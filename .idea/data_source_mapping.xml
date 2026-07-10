@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="DataSourcePerFileMappings">
-    <file url="file://$PROJECT_DIR$/l3.1/db/20260704103944_delayednotifier.sql" value="b16251ad-76a6-40db-a37b-fc2a912bc77f" />
-    <file url="file://$PROJECT_DIR$/l3.1/db/20260709120000_fix_notification_statuses.sql" value="b16251ad-76a6-40db-a37b-fc2a912bc77f" />
-  </component>
-</project>
