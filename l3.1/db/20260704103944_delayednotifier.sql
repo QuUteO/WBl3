@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     channel TEXT NOT NULL CHECK (channel IN ('email', 'telegram')),
     message TEXT NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'sent', 'failed', 'cancelled')),
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'processing', 'retry', 'sent', 'failed', 'cancelled')),
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 5,
     error TEXT,
@@ -16,11 +16,11 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX idx_notifications_status_scheduled
     ON notifications(status, scheduled_at)
-    WHERE status = 'scheduled';
+    WHERE status IN ('scheduled', 'retry');
 
 CREATE INDEX idx_notifications_retry
     ON notifications(status, retry_count)
-    WHERE status = 'failed' AND retry_count < max_retries;
+    WHERE status = 'retry' AND retry_count < max_retries;
 
 -- +goose Down
 DROP TABLE IF EXISTS notifications;

@@ -88,9 +88,28 @@ func (r *Repository) GetNotification(ctx context.Context, notificationID uuid.UU
 	return &n, nil
 }
 
+func (r *Repository) ListNotifications(ctx context.Context, limit int) ([]*model.Notification, error) {
+	rows, err := r.conn.Query(ctx, "SELECT id, recipient, channel, message, scheduled_at, status, retry_count, max_retries, sent_at, created_at, updated_at FROM notifications ORDER BY created_at DESC LIMIT $1", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*model.Notification
+	for rows.Next() {
+		var n model.Notification
+		if err := rows.Scan(&n.ID, &n.Recipient, &n.Channel, &n.Message, &n.ScheduledAt, &n.Status, &n.RetryCount, &n.MaxRetries, &n.SentAt, &n.CreatedAt, &n.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, &n)
+	}
+
+	return list, rows.Err()
+}
+
 func (r *Repository) DeleteNotification(ctx context.Context, notificationID uuid.UUID) error {
-	// 1. Удаляем из Postgres
-	_, err := r.conn.Exec(ctx, "DELETE FROM notifications WHERE id = $1", notificationID)
+	// Отмена сохраняет запись, чтобы GET /notify/{id} мог вернуть финальный статус.
+	_, err := r.conn.Exec(ctx, "UPDATE notifications SET status = 'cancelled', updated_at = $2 WHERE id = $1 AND status IN ('scheduled', 'processing', 'retry')", notificationID, time.Now())
 	if err != nil {
 		return err
 	}

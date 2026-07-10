@@ -23,10 +23,14 @@ func (r *RabbitPublisher) Push(ctx context.Context, data *model.Notification, ro
 		return fmt.Errorf("ошибка маршалинга в json: %w", err)
 	}
 
+	fmt.Printf("[PUBLISHER] Пытаемся отправить сообщение! ID: %s, RoutingKey: %s\n", data.ID, routingKey)
+
 	err = r.publisher.Publish(ctx, body, routingKey)
 	if err != nil {
+		fmt.Printf("[PUBLISHER ERROR] Ошибка при вызове r.publisher.Publish: %v\n", err)
 		return err
 	}
 
+	fmt.Printf("[PUBLISHER SUCCESS] Сообщение успешно ушло в RabbitMQ! ID: %s\n", data.ID)
 	return nil
 }

@@ -5,10 +5,12 @@ import (
 	"DelayedNotifier/internal/config"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/smtp"
 	"time"
@@ -28,6 +30,9 @@ var (
 const (
 	channelEmail    = "email"
 	channelTelegram = "telegram"
+	statusCancelled = "cancelled"
+	statusFailed    = "failed"
+	statusSent      = "sent"
 	emptyString     = ""
 )
 
@@ -35,6 +40,7 @@ type NotificationRepository interface {
 	CreateNotification(ctx context.Context, notification *model.Notification) error
 	GetNotification(ctx context.Context, notificationID uuid.UUID) (*model.Notification, error)
 	DeleteNotification(ctx context.Context, notificationID uuid.UUID) error
+	ListNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string, at *time.Time, count int) error
 	UpdateRetryInfo(ctx context.Context, id uuid.UUID, status string, count int, at time.Time) error
 	FetchReadyNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
@@ -98,20 +104,11 @@ func (s *Service) CreateNotification(ctx context.Context, req *model.CreateNotif
 		return nil, err
 	}
 
-	// Если уведомление отложено на будущее (более 10 сек), не отправляем в RabbitMQ сразу
 	if notification.ScheduledAt.After(now.Add(10 * time.Second)) {
 		return &notification, nil
 	}
 
-	var routingKey string
-	switch notification.Channel {
-	case channelTelegram:
-		routingKey = "notification.telegram"
-	case channelEmail:
-		routingKey = "notification.email"
-	default:
-		routingKey = "notification"
-	}
+	routingKey := "notification-queue"
 
 	err = s.publisher.Push(ctx, &notification, routingKey)
 	if err != nil {
@@ -134,11 +131,28 @@ func (s *Service) GetNotification(ctx context.Context, id uuid.UUID) (*model.Not
 	return notification, nil
 }
 
+func (s *Service) ListNotifications(ctx context.Context, limit int) ([]*model.Notification, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+
+	return s.repository.ListNotifications(ctx, limit)
+}
+
 func (s *Service) DeleteNotification(ctx context.Context, id uuid.UUID) error {
 	return s.repository.DeleteNotification(ctx, id)
 }
 
 func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification) error {
+	current, err := s.repository.GetNotification(ctx, n.ID)
+	if err != nil {
+		return err
+	}
+	if current.Status == statusCancelled || current.Status == statusSent || current.Status == statusFailed {
+		return nil
+	}
+	n = current
+
 	now := time.Now()
 
 	if n.ScheduledAt.After(now.Add(5 * time.Second)) {
@@ -146,7 +160,7 @@ func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification
 		return ErrTooEarly
 	}
 
-	err := s.SendToExternalAPI(ctx, n)
+	err = s.SendToExternalAPI(ctx, n)
 
 	if err == nil {
 		n.Status = "sent"
@@ -178,27 +192,17 @@ func (s *Service) ProcessNotification(ctx context.Context, n *model.Notification
 }
 
 func (s *Service) CheckAndPublishDelayed(ctx context.Context) error {
-	// База данных теперь автоматически ставит статус 'processing' при выборке
 	notifications, err := s.repository.FetchReadyNotifications(ctx, 50)
 	if err != nil {
 		return fmt.Errorf("ошибка выборки отложенных уведомлений: %w", err)
 	}
 
 	for _, n := range notifications {
-		var routingKey string
-		switch n.Channel {
-		case channelTelegram:
-			routingKey = "notification.telegram"
-		case channelEmail:
-			routingKey = "notification.email"
-		default:
-			routingKey = "notification"
-		}
+		routingKey := "notification-queue"
 
 		err = s.publisher.Push(ctx, n, routingKey)
 		if err != nil {
 			log.Printf("Не удалось отправить отложенное уведомление %s в очередь: %v", n.ID, err)
-			// Если пуш в очередь провалился, возвращаем статус назад
 			_ = s.repository.UpdateRetryInfo(ctx, n.ID, "scheduled", n.RetryCount, n.ScheduledAt)
 			continue
 		}
@@ -251,13 +255,55 @@ func (s *Service) sendToTelegram(ctx context.Context, n *model.Notification) err
 }
 
 func (s *Service) sendToEmail(ctx context.Context, n *model.Notification) error {
-	msg := []byte("Subject: Новое уведомление\n\n" + n.Message)
-	auth := smtp.PlainAuth("", s.smtp.SenderEmail, s.smtp.Password, s.smtp.SMTPHost)
+	addr := fmt.Sprintf("%s:%s", s.smtp.SMTPHost, s.smtp.SMTPPort)
 
-	err := smtp.SendMail(s.smtp.SMTPHost+":"+s.smtp.SMTPPort, auth, s.smtp.SenderEmail, []string{n.Recipient}, msg)
+	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: =?UTF-8?B?0J3QvtCy0L7QtSDRg9Cy0LXQtNC+0LzQu9C10L3QuNC1?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"utf-8\"\r\n\r\n%s",
+		s.smtp.SenderEmail, n.Recipient, n.Message))
+
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	// 1. Обычное TCP подключение (для 587)
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return fmt.Errorf("ошибка отправки письма через smtp: %w", err)
+		return fmt.Errorf("ошибка tcp-подключения: %w", err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, s.smtp.SMTPHost)
+	if err != nil {
+		return fmt.Errorf("ошибка создания smtp-клиента: %w", err)
+	}
+	defer client.Quit()
+
+	// 2. Переключаемся в TLS
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		ServerName:         s.smtp.SMTPHost,
+	}
+	if err = client.StartTLS(tlsConfig); err != nil {
+		return fmt.Errorf("ошибка starttls: %w", err)
 	}
 
-	return nil
+	// 3. Авторизация
+	auth := smtp.PlainAuth("", s.smtp.SenderEmail, s.smtp.Password, s.smtp.SMTPHost)
+	if err = client.Auth(auth); err != nil {
+		return fmt.Errorf("ошибка авторизации: %w", err)
+	}
+
+	if err = client.Mail(s.smtp.SenderEmail); err != nil {
+		return err
+	}
+	if err = client.Rcpt(n.Recipient); err != nil {
+		return err
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(msg)
+	if err != nil {
+		return err
+	}
+
+	return w.Close()
 }

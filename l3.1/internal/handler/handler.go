@@ -11,6 +11,7 @@ import (
 
 type NotificationService interface {
 	CreateNotification(ctx context.Context, req *model.CreateNotification) (*model.Notification, error)
+	ListNotifications(ctx context.Context, limit int) ([]*model.Notification, error)
 	GetNotification(ctx context.Context, id uuid.UUID) (*model.Notification, error)
 	DeleteNotification(ctx context.Context, id uuid.UUID) error
 }
@@ -40,6 +41,16 @@ func (h *Handler) CreateNotification(c *ginext.Context) {
 	}
 
 	c.JSON(http.StatusCreated, notification)
+}
+
+func (h *Handler) ListNotifications(c *ginext.Context) {
+	notifications, err := h.service.ListNotifications(c.Request.Context(), 100)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ginext.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, notifications)
 }
 
 func (h *Handler) GetNotification(c *ginext.Context) {
@@ -75,5 +86,5 @@ func (h *Handler) DeleteNotification(c *ginext.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ginext.H{"status": "deleted"})
+	c.JSON(http.StatusOK, ginext.H{"status": "cancelled"})
 }

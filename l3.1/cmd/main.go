@@ -29,7 +29,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	cfg, err := config.LoadConfig("/Users/mihailignatev/Desktop/WBl3/l3.1/config.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -124,31 +129,32 @@ func main() {
 
 	// 5. Логика обработки сообщений (Воркер)
 	messageProcessor := func(ctx context.Context, d amqp091.Delivery) error {
+		log.Info(fmt.Sprintf("[RABBITMQ] Получены сырые байты из очереди! Размер: %d байт. RoutingKey: %s", len(d.Body), d.RoutingKey))
+
 		var notification model.Notification
 		err := json.Unmarshal(d.Body, &notification)
 		if err != nil {
-			log.Error("Ошибка анмаршалинга сообщения")
+			log.Error(fmt.Sprintf("[RABBITMQ ERROR] Не удалось распарсить JSON сообщения: %v. Сырые данные: %s", err, string(d.Body)))
 			return err
 		}
+
+		log.Info(fmt.Sprintf("[WORKER] Начинаем обработку уведомления ID: %s, Канал: %s, Получатель: %s", notification.ID, notification.Channel, notification.Recipient))
 
 		err = srv.ProcessNotification(ctx, &notification)
 		if err != nil {
 			if errors.Is(err, service.ErrTooEarly) {
-				log.Info(fmt.Sprintf("Уведомление %s пришло слишком рано, возвращено в расписание", notification.ID))
+				log.Info(fmt.Sprintf("[WORKER] Уведомление %s пришло слишком рано, возвращено в расписание", notification.ID))
 				return nil
 			}
-			log.Error(fmt.Sprintf("Воркер не смог отправить уведомление %s: %v", notification.ID, err))
+			log.Error(fmt.Sprintf("[WORKER ERROR] Ошибка внутри SendToExternalAPI для %s: %v", notification.ID, err))
 			return nil
 		}
 
-		log.Info(fmt.Sprintf("Уведомление %s успешно обработано и отправлено", notification.ID))
+		log.Info(fmt.Sprintf("[SUCCESS] Уведомление %s успешно обработано, отправлено на внешнее API и обновлено в БД!", notification.ID))
 		return nil
 	}
 
-	queueArgs := amqp091.Table{
-		"x-dead-letter-exchange":    "dlx",
-		"x-dead-letter-routing-key": "test.queue.dlq",
-	}
+	queueArgs := amqp091.Table{}
 
 	consumerCfg := rabbitmq.ConsumerConfig{
 		Queue: "notification-queue",
@@ -162,6 +168,7 @@ func main() {
 		log.Info("Фоновый воркер (Consumer) успешно запущен и ждет сообщения...")
 		if err := consumer.Start(ctx); err != nil {
 			log.Error(fmt.Sprintf("Ошибка при потреблении сообщений: %v", err))
+			fmt.Printf("\nКРИТИЧЕСКАЯ ОШИБКА ЗАПУСКА ВОРКЕРА: %v\n\n", err)
 		}
 	}()
 
@@ -192,8 +199,12 @@ func main() {
 	router.Use(ginext.Logger(), ginext.Recovery())
 
 	router.POST("/notify", h.CreateNotification)
+	router.GET("/notify", h.ListNotifications)
 	router.GET("/notify/:id", h.GetNotification)
 	router.DELETE("/notify/:id", h.DeleteNotification)
+	router.GET("/", func(c *ginext.Context) {
+		c.File("web/index.html")
+	})
 
 	go func() {
 		log.Info("HTTP-сервер запускается на " + cfg.HTTP.Address)

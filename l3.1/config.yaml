@@ -11,16 +11,22 @@ POSTGRES:
   MIN_CONNS: 5
   POSTGRES_DSN: postgres://user:user@localhost:5432/DelayedNotifier
 
+REDIS:
+  ADDRESS: 127.0.0.1:6379
+  PASSWORD: ""
+  MAX_MEMORY: 256mb
+  POLICY: allkeys-lru
+
 RABBITMQ:
   URL: amqp://guest:guest@localhost:5672/
   CONNECTION_NAME: DelayedNotifier
   EXCHANGE: delayed.notifier
 
 TELEGRAM:
-  BOT_TOKEN: 8053553966:AAFJlaWEoESKW59vFaJfan45p23SkxBbCt8
+  BOT_TOKEN: your_telegram_bot_token
 
 EMAIL:
-  SMTP_PORT: 2525
-  SMTP_HOST: smtp.mailtrap.io
-  SENDER_EMAIL: quuteo@yandex.ru
-  PASSWORD: pass
+  SMTP_PORT: 587
+  SMTP_HOST: smtp.gmail.com
+  SENDER_EMAIL: quuteo86@gmail.com
+  PASSWORD: fmsf phka ztjk kskc

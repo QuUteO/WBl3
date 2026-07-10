@@ -38,7 +38,7 @@ type HTTPServer struct {
 type RabbitMQ struct {
 	URL            string `yaml:"URL" default:"amqp://guest:guest@localhost:5672/"`
 	ConnectionName string `yaml:"CONNECTION_NAME" default:"DelayedNotifier"`
-	ExchangeName   string `yaml:"EXCHANGE" default:"DelayedNotifier"`
+	ExchangeName   string `yaml:"EXCHANGE" default:"delayed.notifier"`
 }
 
 type Telegram struct {
