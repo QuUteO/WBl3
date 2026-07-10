@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="SqlDialectMappings">
-    <file url="file://$PROJECT_DIR$/l3.1/db/20260704103944_delayednotifier.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/l3.1/db/20260709120000_fix_notification_statuses.sql" dialect="PostgreSQL" />
-  </component>
-</project>
