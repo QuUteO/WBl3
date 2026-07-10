@@ -4,7 +4,10 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d3b6459c-9244-45b6-921a-02af400ce534" name="Changes" comment="DelayedNotifier" />
+    <list default="true" id="d3b6459c-9244-45b6-921a-02af400ce534" name="Changes" comment="DelayedNotifier">
+      <change afterPath="$PROJECT_DIR$/l3.1/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
